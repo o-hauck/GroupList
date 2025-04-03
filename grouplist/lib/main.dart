@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'about.dart';
 
 void main() {
   runApp(const MyApp());
@@ -36,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const List<Widget> _screens = <Widget>[
     GroupsScreen(),
-    AboutScreen(),
+    AboutPage(),
   ];
 
   void _onItemTapped(int index) {
@@ -48,9 +49,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Groups'),
-      ),
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         items: const [
@@ -79,6 +77,8 @@ class GroupsScreen extends StatefulWidget {
 
 class _GroupsScreenState extends State<GroupsScreen> {
   List<String> _groups = [];
+  Set<int> _selectedGroups = {};
+  bool _selectionMode = false;
 
   @override
   void initState() {
@@ -109,6 +109,26 @@ class _GroupsScreenState extends State<GroupsScreen> {
     _saveGroups();
   }
 
+  void _removeSelectedGroups() {
+    setState(() {
+      _groups = _groups.asMap().entries.where((entry) => !_selectedGroups.contains(entry.key)).map((entry) => entry.value).toList();
+      _selectedGroups.clear();
+      _selectionMode = false;
+    });
+    _saveGroups();
+  }
+
+  void _toggleSelection(int index) {
+    setState(() {
+      if (_selectedGroups.contains(index)) {
+        _selectedGroups.remove(index);
+      } else {
+        _selectedGroups.add(index);
+      }
+      _selectionMode = _selectedGroups.isNotEmpty;
+    });
+  }
+
   void _showAddGroupDialog() {
     final TextEditingController _controller = TextEditingController();
 
@@ -123,9 +143,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('Cancelar'),
             ),
             TextButton(
@@ -146,17 +164,47 @@ class _GroupsScreenState extends State<GroupsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ListView.builder(
-        itemCount: _groups.length,
-        itemBuilder: (context, index) {
-          return ListTile(
-            leading: const CircleAvatar(
-              child: Icon(Icons.group),
+      appBar: AppBar(
+        title: const Text('Groups'),
+      ),
+      body: Column(
+        children: [
+          if (_selectionMode)
+            AppBar(
+              title: const Text('Opções'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.delete),
+                  onPressed: _removeSelectedGroups,
+                ),
+              ],
             ),
-            title: Text(_groups[index]),
-            subtitle: const Text('Última mensagem do grupo...'),
-          );
-        },
+          Expanded(
+            child: ListView.builder(
+              itemCount: _groups.length,
+              itemBuilder: (context, index) {
+                return ListTile(
+                  leading: _selectionMode ? Checkbox(
+                    value: _selectedGroups.contains(index),
+                    onChanged: (_) => _toggleSelection(index),
+                  ) : const CircleAvatar(child: Icon(Icons.group)),
+                  title: Text(_groups[index]),
+                  onTap: () {
+                    if (_selectionMode) {
+                      _toggleSelection(index);
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => GroupDetailsScreen(groupName: _groups[index])),
+                      );
+                    }
+                  },
+                  onLongPress: () => _toggleSelection(index),
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddGroupDialog,
@@ -166,15 +214,19 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 }
 
-class AboutScreen extends StatelessWidget {
-  const AboutScreen({super.key});
+class GroupDetailsScreen extends StatelessWidget {
+  final String groupName;
+
+  const GroupDetailsScreen({super.key, required this.groupName});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Text(
-        'Tela Sobre',
-        style: TextStyle(fontSize: 20),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(groupName),
+      ),
+      body: const Center(
+        child: Text('Aqui será exibida a lista do grupo.'),
       ),
     );
   }
