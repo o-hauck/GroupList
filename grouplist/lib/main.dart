@@ -68,6 +68,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+class GroupData {
+  final String name;
+  final String category;
+
+  GroupData(this.name, this.category);
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'category': category,
+      };
+
+  static GroupData fromJson(Map<String, dynamic> json) =>
+      GroupData(json['name'], json['category']);
+}
+
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
 
@@ -76,9 +91,12 @@ class GroupsScreen extends StatefulWidget {
 }
 
 class _GroupsScreenState extends State<GroupsScreen> {
-  List<String> _groups = [];
+  List<GroupData> _groups = [];
   Set<int> _selectedGroups = {};
   bool _selectionMode = false;
+  String? _selectedCategory;
+
+  final List<String> _categories = ['Compras', 'Convidados', 'Viagens'];
 
   @override
   void initState() {
@@ -90,28 +108,34 @@ class _GroupsScreenState extends State<GroupsScreen> {
     final prefs = await SharedPreferences.getInstance();
     final String? groupsJson = prefs.getString('groups');
     if (groupsJson != null) {
+      final List decoded = jsonDecode(groupsJson);
       setState(() {
-        _groups = List<String>.from(jsonDecode(groupsJson));
+        _groups = decoded.map((e) => GroupData.fromJson(e)).toList();
       });
     }
   }
 
   Future<void> _saveGroups() async {
     final prefs = await SharedPreferences.getInstance();
-    final String groupsJson = jsonEncode(_groups);
+    final String groupsJson = jsonEncode(_groups.map((e) => e.toJson()).toList());
     await prefs.setString('groups', groupsJson);
   }
 
-  void _addGroup(String name) {
+  void _addGroup(GroupData group) {
     setState(() {
-      _groups.add(name);
+      _groups.add(group);
     });
     _saveGroups();
   }
 
   void _removeSelectedGroups() {
     setState(() {
-      _groups = _groups.asMap().entries.where((entry) => !_selectedGroups.contains(entry.key)).map((entry) => entry.value).toList();
+      _groups = _groups
+          .asMap()
+          .entries
+          .where((entry) => !_selectedGroups.contains(entry.key))
+          .map((entry) => entry.value)
+          .toList();
       _selectedGroups.clear();
       _selectionMode = false;
     });
@@ -129,86 +153,189 @@ class _GroupsScreenState extends State<GroupsScreen> {
     });
   }
 
-  void _showAddGroupDialog() {
-    final TextEditingController _controller = TextEditingController();
+  void _navigateToNewGroupForm() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NewGroupForm(
+          onCreate: (group) => _addGroup(group),
+        ),
+      ),
+    );
+  }
 
-    showDialog(
+  void _showFilterMenu() {
+    showModalBottomSheet(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Criar novo grupo'),
-          content: TextField(
-            controller: _controller,
-            decoration: const InputDecoration(hintText: 'Nome do grupo'),
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.filter_alt_off),
+            title: const Text('Todos'),
+            onTap: () {
+              setState(() => _selectedCategory = null);
+              Navigator.pop(context);
+            },
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (_controller.text.isNotEmpty) {
-                  _addGroup(_controller.text);
-                }
-                Navigator.of(context).pop();
-              },
-              child: const Text('Criar'),
-            ),
-          ],
-        );
-      },
+          ..._categories.map((category) => ListTile(
+                leading: const Icon(Icons.label),
+                title: Text(category),
+                onTap: () {
+                  setState(() => _selectedCategory = category);
+                  Navigator.pop(context);
+                },
+              )),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final filteredGroups = _selectedCategory == null
+        ? _groups
+        : _groups.where((g) => g.category == _selectedCategory).toList();
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Groups'),
-      ),
-      body: Column(
-        children: [
+        title: const Text('Grupos'),
+        actions: [
           if (_selectionMode)
-            AppBar(
-              title: const Text('Opções'),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.delete),
-                  onPressed: _removeSelectedGroups,
-                ),
-              ],
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: _removeSelectedGroups,
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.filter_list),
+              onPressed: _showFilterMenu,
             ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _groups.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  leading: _selectionMode ? Checkbox(
-                    value: _selectedGroups.contains(index),
-                    onChanged: (_) => _toggleSelection(index),
-                  ) : const CircleAvatar(child: Icon(Icons.group)),
-                  title: Text(_groups[index]),
-                  onTap: () {
-                    if (_selectionMode) {
-                      _toggleSelection(index);
-                    } else {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => GroupDetailsScreen(groupName: _groups[index])),
-                      );
-                    }
-                  },
-                  onLongPress: () => _toggleSelection(index),
-                );
-              },
-            ),
-          ),
         ],
       ),
+      body: ListView.builder(
+        itemCount: filteredGroups.length,
+        itemBuilder: (context, index) {
+          final group = filteredGroups[index];
+          return ListTile(
+            leading: const CircleAvatar(child: Icon(Icons.group)),
+            title: Text(group.name),
+            trailing: _selectionMode
+                ? Checkbox(
+                    value: _selectedGroups.contains(index),
+                    onChanged: (_) => _toggleSelection(index),
+                  )
+                : null,
+            onTap: () {
+              if (_selectionMode) {
+                _toggleSelection(index);
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => GroupDetailsScreen(groupName: group.name),
+                  ),
+                );
+              }
+            },
+            onLongPress: () => _toggleSelection(index),
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddGroupDialog,
+        onPressed: _navigateToNewGroupForm,
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class NewGroupForm extends StatefulWidget {
+  final void Function(GroupData group) onCreate;
+
+  const NewGroupForm({super.key, required this.onCreate});
+
+  @override
+  State<NewGroupForm> createState() => _NewGroupFormState();
+}
+
+class _NewGroupFormState extends State<NewGroupForm> {
+  final TextEditingController _nameController = TextEditingController();
+  final List<String> _categories = ['Compras', 'Convidados', 'Viagens'];
+  String _selectedCategory = 'Compras';
+
+  final List<String> _contacts = ['Zack John', 'Maria Silva', 'Lucas Costa'];
+  final Set<String> _selectedContacts = {'Zack John'};
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Novo Grupo')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const CircleAvatar(
+              radius: 30,
+              child: Icon(Icons.image, size: 30),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Nome do grupo...'),
+            ),
+            const SizedBox(height: 16),
+            const Text('Categoria'),
+            Wrap(
+              spacing: 8,
+              children: _categories.map((category) {
+                final isSelected = _selectedCategory == category;
+                return ChoiceChip(
+                  label: Text(category),
+                  selected: isSelected,
+                  onSelected: (_) {
+                    setState(() {
+                      _selectedCategory = category;
+                    });
+                  },
+                  selectedColor: Colors.black,
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : Colors.black,
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            const Text('Membros:'),
+            ..._contacts.map((contact) => ListTile(
+                  leading: const CircleAvatar(child: Icon(Icons.person)),
+                  title: Text(contact),
+                  trailing: Checkbox(
+                    value: _selectedContacts.contains(contact),
+                    onChanged: (selected) {
+                      setState(() {
+                        if (selected == true) {
+                          _selectedContacts.add(contact);
+                        } else {
+                          _selectedContacts.remove(contact);
+                        }
+                      });
+                    },
+                  ),
+                )),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          if (_nameController.text.isNotEmpty) {
+            final group = GroupData(_nameController.text, _selectedCategory);
+            widget.onCreate(group);
+            Navigator.pop(context);
+          }
+        },
+        child: const Icon(Icons.check),
       ),
     );
   }

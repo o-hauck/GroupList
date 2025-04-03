@@ -25,12 +25,7 @@ class AboutPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text("Sobre"),
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            // Voltar
-          },
-        ),
+        
       ),
       body: const Center(
         child: Column(
@@ -51,23 +46,7 @@ class AboutPage extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1, // Ícone do meio selecionado
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.group),
-            label: '',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.info_outline),
-            label: '',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: '',
-          ),
-        ],
-      ),
+      
     );
   }
 }
