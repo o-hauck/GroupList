@@ -1,9 +1,8 @@
-// lib/main.dart
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'about.dart';
+import 'list.dart';
 
 void main() {
   runApp(const MyApp());
@@ -92,7 +91,7 @@ class GroupsScreen extends StatefulWidget {
 
 class _GroupsScreenState extends State<GroupsScreen> {
   List<GroupData> _groups = [];
-  Set<int> _selectedGroups = {};
+  final Set<int> _selectedGroups = {};
   bool _selectionMode = false;
   String? _selectedCategory;
 
@@ -217,28 +216,29 @@ class _GroupsScreenState extends State<GroupsScreen> {
         itemCount: filteredGroups.length,
         itemBuilder: (context, index) {
           final group = filteredGroups[index];
+          final actualIndex = _groups.indexOf(group);
           return ListTile(
             leading: const CircleAvatar(child: Icon(Icons.group)),
             title: Text(group.name),
             trailing: _selectionMode
                 ? Checkbox(
-                    value: _selectedGroups.contains(index),
-                    onChanged: (_) => _toggleSelection(index),
+                    value: _selectedGroups.contains(actualIndex),
+                    onChanged: (_) => _toggleSelection(actualIndex),
                   )
                 : null,
             onTap: () {
               if (_selectionMode) {
-                _toggleSelection(index);
+                _toggleSelection(actualIndex);
               } else {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => GroupDetailsScreen(groupName: group.name),
+                    builder: (context) => ListPage(groupName: group.name),
                   ),
                 );
               }
             },
-            onLongPress: () => _toggleSelection(index),
+            onLongPress: () => _toggleSelection(actualIndex),
           );
         },
       ),
@@ -264,69 +264,71 @@ class _NewGroupFormState extends State<NewGroupForm> {
   final List<String> _categories = ['Compras', 'Convidados', 'Viagens'];
   String _selectedCategory = 'Compras';
 
-  final List<String> _contacts = ['Zack John', 'Maria Silva', 'Lucas Costa'];
-  final Set<String> _selectedContacts = {'Zack John'};
+  final List<String> _contacts = ['Zack John', 'Maria Silva', 'Lucas Costa', 'Martin Randolph', 'Maximillian Jacobson'];
+  final Set<String> _selectedContacts = {};
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Novo Grupo')),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const CircleAvatar(
-              radius: 30,
-              child: Icon(Icons.image, size: 30),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Nome do grupo...'),
-            ),
-            const SizedBox(height: 16),
-            const Text('Categoria'),
-            Wrap(
-              spacing: 8,
-              children: _categories.map((category) {
-                final isSelected = _selectedCategory == category;
-                return ChoiceChip(
-                  label: Text(category),
-                  selected: isSelected,
-                  onSelected: (_) {
-                    setState(() {
-                      _selectedCategory = category;
-                    });
-                  },
-                  selectedColor: Colors.black,
-                  labelStyle: TextStyle(
-                    color: isSelected ? Colors.white : Colors.black,
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-            const Text('Membros:'),
-            ..._contacts.map((contact) => ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.person)),
-                  title: Text(contact),
-                  trailing: Checkbox(
-                    value: _selectedContacts.contains(contact),
-                    onChanged: (selected) {
-                      setState(() {
-                        if (selected == true) {
-                          _selectedContacts.add(contact);
-                        } else {
-                          _selectedContacts.remove(contact);
-                        }
-                      });
-                    },
-                  ),
-                )),
-          ],
-        ),
+          radius: 30,
+          child: Icon(Icons.image, size: 30),
       ),
+      const SizedBox(height: 16),
+      TextField(
+        controller: _nameController,
+        decoration: const InputDecoration(labelText: 'Nome do grupo...'),
+      ),
+      const SizedBox(height: 16),
+      const Text('Categoria'),
+      Wrap(
+        spacing: 8,
+        children: _categories.map((category) {
+          final isSelected = _selectedCategory == category;
+          return ChoiceChip(
+            label: Text(category),
+            selected: isSelected,
+            onSelected: (_) {
+              setState(() {
+                _selectedCategory = category;
+              });
+            },
+            selectedColor: Colors.black,
+            labelStyle: TextStyle(
+              color: isSelected ? Colors.white : Colors.black,
+            ),
+          );
+        }).toList(),
+      ),
+      const SizedBox(height: 16),
+      const Text('Membros:'),
+      ..._contacts.map((contact) => ListTile(
+            leading: const CircleAvatar(child: Icon(Icons.person)),
+            title: Text(contact),
+            trailing: Checkbox(
+              value: _selectedContacts.contains(contact),
+              onChanged: (selected) {
+                setState(() {
+                  if (selected == true) {
+                    _selectedContacts.add(contact);
+                  } else {
+                    _selectedContacts.remove(contact);
+                  }
+                });
+              },
+            ),
+          )),
+      const SizedBox(height: 100), // espaço extra para não esconder o último item com o teclado
+    ],
+  ),
+),
+
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           if (_nameController.text.isNotEmpty) {
