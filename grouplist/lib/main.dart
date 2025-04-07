@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'about.dart';
 import 'list.dart';
+import 'newgroup.dart';
+import 'groupdata.dart';
 
 void main() {
   runApp(const MyApp());
@@ -67,20 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class GroupData {
-  final String name;
-  final String category;
 
-  GroupData(this.name, this.category);
-
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'category': category,
-      };
-
-  static GroupData fromJson(Map<String, dynamic> json) =>
-      GroupData(json['name'], json['category']);
-}
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
@@ -250,98 +239,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 }
 
-class NewGroupForm extends StatefulWidget {
-  final void Function(GroupData group) onCreate;
-
-  const NewGroupForm({super.key, required this.onCreate});
-
-  @override
-  State<NewGroupForm> createState() => _NewGroupFormState();
-}
-
-class _NewGroupFormState extends State<NewGroupForm> {
-  final TextEditingController _nameController = TextEditingController();
-  final List<String> _categories = ['Compras', 'Convidados', 'Viagens'];
-  String _selectedCategory = 'Compras';
-
-  final List<String> _contacts = ['Zack John', 'Maria Silva', 'Lucas Costa', 'Martin Randolph', 'Maximillian Jacobson'];
-  final Set<String> _selectedContacts = {};
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Novo Grupo')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const CircleAvatar(
-          radius: 30,
-          child: Icon(Icons.image, size: 30),
-      ),
-      const SizedBox(height: 16),
-      TextField(
-        controller: _nameController,
-        decoration: const InputDecoration(labelText: 'Nome do grupo...'),
-      ),
-      const SizedBox(height: 16),
-      const Text('Categoria'),
-      Wrap(
-        spacing: 8,
-        children: _categories.map((category) {
-          final isSelected = _selectedCategory == category;
-          return ChoiceChip(
-            label: Text(category),
-            selected: isSelected,
-            onSelected: (_) {
-              setState(() {
-                _selectedCategory = category;
-              });
-            },
-            selectedColor: Colors.black,
-            labelStyle: TextStyle(
-              color: isSelected ? Colors.white : Colors.black,
-            ),
-          );
-        }).toList(),
-      ),
-      const SizedBox(height: 16),
-      const Text('Membros:'),
-      ..._contacts.map((contact) => ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.person)),
-            title: Text(contact),
-            trailing: Checkbox(
-              value: _selectedContacts.contains(contact),
-              onChanged: (selected) {
-                setState(() {
-                  if (selected == true) {
-                    _selectedContacts.add(contact);
-                  } else {
-                    _selectedContacts.remove(contact);
-                  }
-                });
-              },
-            ),
-          )),
-      const SizedBox(height: 100), // espaço extra para não esconder o último item com o teclado
-    ],
-  ),
-),
-
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          if (_nameController.text.isNotEmpty) {
-            final group = GroupData(_nameController.text, _selectedCategory);
-            widget.onCreate(group);
-            Navigator.pop(context);
-          }
-        },
-        child: const Icon(Icons.check),
-      ),
-    );
-  }
-}
 
 class GroupDetailsScreen extends StatelessWidget {
   final String groupName;

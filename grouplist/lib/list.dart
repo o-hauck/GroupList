@@ -44,35 +44,20 @@ class _ListPageState extends State<ListPage> {
     _saveItems();
   }
 
-  void _clearList() {
+  void _selectAllItems() {
     setState(() {
-      _items.clear();
+      for (final item in _items) {
+        item.checked = true;
+      }
     });
     _saveItems();
   }
 
-  void _removeSelected() {
+  void _removeSelectedItems() {
     setState(() {
       _items.removeWhere((item) => item.checked);
     });
     _saveItems();
-  }
-
-  void _showOptionsMenu() async {
-    final result = await showMenu<String>(
-      context: context,
-      position: const RelativeRect.fromLTRB(1000, 80, 0, 0),
-      items: [
-        const PopupMenuItem(value: 'clear', child: Text('Limpar lista')),
-        const PopupMenuItem(value: 'removeSelected', child: Text('Remover selecionados')),
-      ],
-    );
-
-    if (result == 'clear') {
-      _clearList();
-    } else if (result == 'removeSelected') {
-      _removeSelected();
-    }
   }
 
   void _showAddItemDialog() {
@@ -128,9 +113,24 @@ class _ListPageState extends State<ListPage> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: _showOptionsMenu,
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'select_all') {
+                _selectAllItems();
+              } else if (value == 'remove_selected') {
+                _removeSelectedItems();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'select_all',
+                child: Text('Selecionar todos'),
+              ),
+              const PopupMenuItem(
+                value: 'remove_selected',
+                child: Text('Remover selecionados'),
+              ),
+            ],
           ),
         ],
       ),
