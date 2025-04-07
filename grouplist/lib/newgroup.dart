@@ -72,7 +72,7 @@ class _NewGroupFormState extends State<NewGroupForm> {
     final filtered = _contacts.where((contact) {
       final name = contact.displayName.isNotEmpty
           ? contact.displayName
-          : (contact.name.first + ' ' + contact.name.last).trim();
+          : ('${contact.name.first} ${contact.name.last}').trim();
       return name.toLowerCase().contains(query);
     }).toList();
 
@@ -97,7 +97,7 @@ class _NewGroupFormState extends State<NewGroupForm> {
         : [..._filteredContacts, ...nextBatch.where((contact) {
             final name = contact.displayName.isNotEmpty
                 ? contact.displayName
-                : (contact.name.first + ' ' + contact.name.last).trim();
+                : ('${contact.name.first} ${contact.name.last}').trim();
             return name.toLowerCase().contains(_searchController.text.toLowerCase());
           })];
 
@@ -169,7 +169,7 @@ class _NewGroupFormState extends State<NewGroupForm> {
                   title: Text(
                     contact.displayName.isNotEmpty
                         ? contact.displayName
-                        : (contact.name.first + ' ' + contact.name.last).trim(),
+                        : ('${contact.name.first} ${contact.name.last}').trim(),
                     overflow: TextOverflow.ellipsis,
                   ),
                   trailing: Checkbox(
