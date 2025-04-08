@@ -26,7 +26,9 @@ class _ListPageState extends State<ListPage> {
     if (itemsJson != null) {
       final List decoded = jsonDecode(itemsJson);
       setState(() {
-        _items = decoded.map((e) => ItemData.fromJson(e as Map<String, dynamic>)).toList();
+        _items = decoded
+            .map((e) => ItemData.fromJson(e as Map<String, dynamic>))
+            .toList();
       });
     }
   }
@@ -60,6 +62,56 @@ class _ListPageState extends State<ListPage> {
     _saveItems();
   }
 
+  void _showEditItemDialog(int index) {
+    final item = _items[index];
+    final nameController = TextEditingController(text: item.name);
+    final quantityController =
+        TextEditingController(text: item.quantity.toString());
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar Item'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Nome do item'),
+            ),
+            TextField(
+              controller: quantityController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Quantidade'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final name = nameController.text.trim();
+              final quantity =
+                  int.tryParse(quantityController.text.trim()) ?? 1;
+              if (name.isNotEmpty) {
+                setState(() {
+                  _items[index] = ItemData(
+                      name: name, quantity: quantity, checked: item.checked);
+                });
+                _saveItems();
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAddItemDialog() {
     final nameController = TextEditingController();
     final quantityController = TextEditingController();
@@ -90,7 +142,8 @@ class _ListPageState extends State<ListPage> {
           ElevatedButton(
             onPressed: () {
               final name = nameController.text.trim();
-              final quantity = int.tryParse(quantityController.text.trim()) ?? 1;
+              final quantity =
+                  int.tryParse(quantityController.text.trim()) ?? 1;
               if (name.isNotEmpty) {
                 _addItem(name, quantity);
                 Navigator.of(context).pop();
@@ -141,22 +194,33 @@ class _ListPageState extends State<ListPage> {
               itemCount: _items.length,
               itemBuilder: (context, index) {
                 final item = _items[index];
-                return CheckboxListTile(
-                  title: Text(item.name),
-                  value: item.checked,
-                  secondary: CircleAvatar(
+                return ListTile(
+                  leading: CircleAvatar(
                     backgroundColor: Colors.deepPurple.shade50,
                     child: Text(
                       item.quantity.toString(),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
-                  onChanged: (val) {
-                    setState(() {
-                      item.checked = val!;
-                    });
-                    _saveItems();
-                  },
+                  title: Text(
+                    item.name,
+                    style: TextStyle(
+                      decoration:
+                          item.checked ? TextDecoration.lineThrough : null,
+                      color:
+                          item.checked ? Colors.black.withOpacity(0.5) : null,
+                    ),
+                  ),
+                  trailing: Checkbox(
+                    value: item.checked,
+                    onChanged: (val) {
+                      setState(() {
+                        item.checked = val!;
+                      });
+                      _saveItems();
+                    },
+                  ),
+                  onTap: () => _showEditItemDialog(index),
                 );
               },
             ),

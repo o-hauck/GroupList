@@ -69,8 +69,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-
-
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
 
@@ -105,7 +103,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
   Future<void> _saveGroups() async {
     final prefs = await SharedPreferences.getInstance();
-    final String groupsJson = jsonEncode(_groups.map((e) => e.toJson()).toList());
+    final String groupsJson =
+        jsonEncode(_groups.map((e) => e.toJson()).toList());
     await prefs.setString('groups', groupsJson);
   }
 
@@ -117,17 +116,41 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 
   void _removeSelectedGroups() {
-    setState(() {
-      _groups = _groups
-          .asMap()
-          .entries
-          .where((entry) => !_selectedGroups.contains(entry.key))
-          .map((entry) => entry.value)
-          .toList();
-      _selectedGroups.clear();
-      _selectionMode = false;
-    });
-    _saveGroups();
+    if (_selectedGroups.isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Deseja apagar este grupo?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _groups = _groups
+                      .asMap()
+                      .entries
+                      .where((entry) => !_selectedGroups.contains(entry.key))
+                      .map((entry) => entry.value)
+                      .toList();
+                  _selectedGroups.clear();
+                  _selectionMode = false;
+                });
+                _saveGroups();
+                Navigator.of(context).pop();
+              },
+              child: const Text('Apagar conversa'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _toggleSelection(int index) {
@@ -206,28 +229,48 @@ class _GroupsScreenState extends State<GroupsScreen> {
         itemBuilder: (context, index) {
           final group = filteredGroups[index];
           final actualIndex = _groups.indexOf(group);
-          return ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.group)),
-            title: Text(group.name),
-            trailing: _selectionMode
-                ? Checkbox(
-                    value: _selectedGroups.contains(actualIndex),
-                    onChanged: (_) => _toggleSelection(actualIndex),
-                  )
-                : null,
-            onTap: () {
-              if (_selectionMode) {
-                _toggleSelection(actualIndex);
-              } else {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ListPage(groupName: group.name),
+          final isSelected = _selectedGroups.contains(actualIndex);
+
+          return Container(
+            color: isSelected ? Colors.deepPurple.shade100 : null,
+            child: Stack(
+              children: [
+                ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: Stack(
+                    children: [
+                      const CircleAvatar(child: Icon(Icons.group)),
+                      if (_selectionMode && isSelected)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Colors.deepPurple,
+                            child: const Icon(Icons.check,
+                                size: 14, color: Colors.white),
+                          ),
+                        ),
+                    ],
                   ),
-                );
-              }
-            },
-            onLongPress: () => _toggleSelection(actualIndex),
+                  title: Text(group.name),
+                  onTap: () {
+                    if (_selectionMode) {
+                      _toggleSelection(actualIndex);
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ListPage(groupName: group.name),
+                        ),
+                      );
+                    }
+                  },
+                  onLongPress: () => _toggleSelection(actualIndex),
+                ),
+              ],
+            ),
           );
         },
       ),
@@ -238,7 +281,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
     );
   }
 }
-
 
 class GroupDetailsScreen extends StatelessWidget {
   final String groupName;
