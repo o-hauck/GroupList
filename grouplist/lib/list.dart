@@ -125,11 +125,13 @@ class _ListPageState extends State<ListPage> {
           children: [
             TextField(
               controller: nameController,
+              maxLength: 50,
               decoration: const InputDecoration(labelText: 'Nome do item'),
             ),
             TextField(
               controller: quantityController,
               keyboardType: TextInputType.number,
+              maxLength: 4,
               decoration: const InputDecoration(labelText: 'Quantidade'),
             ),
           ],
