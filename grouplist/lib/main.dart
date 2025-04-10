@@ -5,6 +5,7 @@ import 'about.dart';
 import 'list.dart';
 import 'newgroup.dart';
 import 'groupdata.dart';
+import 'splash.dart';
 
 void main() {
   runApp(const MyApp());
@@ -21,7 +22,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: const SplashScreen(),
     );
   }
 }
@@ -242,13 +243,13 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     children: [
                       const CircleAvatar(child: Icon(Icons.group)),
                       if (_selectionMode && isSelected)
-                        Positioned(
+                        const Positioned(
                           right: 0,
                           bottom: 0,
                           child: CircleAvatar(
                             radius: 12,
                             backgroundColor: Colors.deepPurple,
-                            child: const Icon(Icons.check,
+                            child: Icon(Icons.check,
                                 size: 14, color: Colors.white),
                           ),
                         ),
