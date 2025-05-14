@@ -1,8 +1,9 @@
 class GroupData {
+  String? id; 
   final String name;
   final String category;
 
-  GroupData(this.name, this.category);
+  GroupData(this.name, this.category, {this.id}); 
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -10,5 +11,5 @@ class GroupData {
       };
 
   static GroupData fromJson(Map<String, dynamic> json) =>
-      GroupData(json['name'], json['category']);
+      GroupData(json['name'], json['category'], id: json['id']); 
 }

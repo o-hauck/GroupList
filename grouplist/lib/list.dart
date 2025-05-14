@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
+
+
 class ListPage extends StatefulWidget {
   final String groupName;
 
@@ -235,14 +237,16 @@ class _ListPageState extends State<ListPage> {
 }
 
 class ItemData {
+  String? id; // Adicionado: Campo para o ID do documento
   final String name;
   final int quantity;
   bool checked;
 
-  ItemData({required this.name, required this.quantity, this.checked = false});
+  ItemData({required this.name, required this.quantity, this.checked = false, this.id}); // Modificado o construtor
 
   factory ItemData.fromJson(Map<String, dynamic> json) {
     return ItemData(
+      id: json['id'], // Adicionado: Extrai o ID do JSON
       name: json['name'] as String,
       quantity: json['quantity'] as int,
       checked: json['checked'] as bool? ?? false,
