@@ -152,6 +152,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 
   void _toggleSelection(String groupId) {
+    
     setState(() {
       if (_selectedGroupIds.contains(groupId)) {
         _selectedGroupIds.remove(groupId);
