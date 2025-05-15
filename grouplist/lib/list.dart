@@ -3,8 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart'; // Adicione esta linha
 
 class ListPage extends StatefulWidget {
   final String groupId; // Modifique para groupId
+  final String groupName; // Adicione groupName
 
-  const ListPage({Key? key, required this.groupId}) : super(key: key); // Modifique o construtor
+  const ListPage({Key? key, required this.groupId, required this.groupName}) : super(key: key); // Modifique o construtor
 
   @override
   State<ListPage> createState() => _ListPageState();
@@ -205,7 +206,8 @@ class _ListPageState extends State<ListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.groupId), // Modifique para groupId
+        backgroundColor: Colors.deepPurple.shade200,
+        title: Text(widget.groupName),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),

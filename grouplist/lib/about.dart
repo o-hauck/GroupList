@@ -25,6 +25,7 @@ class AboutPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text("Sobre"),
         centerTitle: true,
+        backgroundColor: Colors.deepPurple.shade200,
         
       ),
       body: const Center(
@@ -33,16 +34,16 @@ class AboutPage extends StatelessWidget {
           children: [
             Text(
               'Group List',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.deepPurple),
             ),
-            Text('© 2025 GroupList'),
+            Text('© 2025 GroupList', style: TextStyle(color: Colors.deepPurple)),
             SizedBox(height: 24),
-            Icon(Icons.check_box, size: 64),
+            Icon(Icons.check_box, size: 64, color: Colors.deepPurple),
             SizedBox(height: 24),
-            Text('Diego Moreira'),
-            Text('Iago Fereguetti'),
-            Text('Luan Barbosa'),
-            Text('Lucas Hauck'),
+            Text('Diego Moreira', style: TextStyle(color: Colors.deepPurple)),
+            Text('Iago Fereguetti', style: TextStyle(color: Colors.deepPurple)),
+            Text('Luan Barbosa', style: TextStyle(color: Colors.deepPurple)),
+            Text('Lucas Hauck', style: TextStyle(color: Colors.deepPurple)),
           ],
         ),
       ),
