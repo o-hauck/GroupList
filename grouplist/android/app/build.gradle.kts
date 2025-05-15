@@ -8,18 +8,18 @@ plugins {
 dependencies {
   
   implementation(platform("com.google.firebase:firebase-bom:33.13.0"))
-
-
-  //SDKS
   implementation("com.google.firebase:firebase-analytics")
-  
-
-
-  // Add the dependencies for any other desired Firebase products
-  // https://firebase.google.com/docs/android/setup#available-libraries
+  implementation("com.google.firebase:firebase-firestore")
   implementation("com.google.firebase:firebase-auth")
-  implementation("com.google.firebase:cloud-firestore")
+  implementation("androidx.core:core-ktx:1.12.0")
+  
 }
+
+repositories {
+    google()
+    mavenCentral()
+}
+
 
 android {
     namespace = "com.example.grouplist"
@@ -40,7 +40,7 @@ android {
         applicationId = "com.example.grouplist"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

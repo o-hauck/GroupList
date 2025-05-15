@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import 'about.dart';
 import 'list.dart';
 import 'newgroup.dart';
 import 'groupdata.dart';
 import 'splash.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 
-void main() async{
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   runApp(const MyApp());
@@ -91,35 +90,33 @@ class _GroupsScreenState extends State<GroupsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadGroups();
+    
   }
 
-  Future<void> _loadGroups() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? groupsJson = prefs.getString('groups');
-    if (groupsJson != null) {
-      final List decoded = jsonDecode(groupsJson);
-      setState(() {
-        _groups = decoded.map((e) => GroupData.fromJson(e)).toList();
-      });
+
+  // Modifique _loadGroups() para usar Firestore
+  Stream<List<GroupData>> _loadGroups() {
+    return FirebaseFirestore.instance.collection('groups').snapshots().map(
+          (snapshot) => snapshot.docs.map((doc) {
+            final data = doc.data();
+            return GroupData.fromJson({'id': doc.id, ...data});
+          }).toList(),
+        );
+  }
+
+  // Modifique _addGroup() para usar Firestore
+  Future<void> _addGroup(GroupData group) async {
+    try {
+      await FirebaseFirestore.instance.collection('groups').add(group.toJson());
+      print('Grupo "${group.name}" adicionado ao Firestore.');
+    } catch (e) {
+      print('Erro ao adicionar grupo "${group.name}": $e');
+      // Tratar o erro adequadamente 
     }
   }
 
-  Future<void> _saveGroups() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String groupsJson =
-        jsonEncode(_groups.map((e) => e.toJson()).toList());
-    await prefs.setString('groups', groupsJson);
-  }
-
-  void _addGroup(GroupData group) {
-    setState(() {
-      _groups.add(group);
-    });
-    _saveGroups();
-  }
-
-  void _removeSelectedGroups() {
+  // Modifique _removeSelectedGroups() para usar Firestore
+  Future<void> _removeSelectedGroups() async {
     if (_selectedGroups.isEmpty) return;
 
     showDialog(
@@ -135,19 +132,32 @@ class _GroupsScreenState extends State<GroupsScreen> {
               child: const Text('Cancelar'),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  _groups = _groups
-                      .asMap()
-                      .entries
-                      .where((entry) => !_selectedGroups.contains(entry.key))
-                      .map((entry) => entry.value)
-                      .toList();
-                  _selectedGroups.clear();
-                  _selectionMode = false;
-                });
-                _saveGroups();
+              onPressed: () async {
                 Navigator.of(context).pop();
+                try {
+                  final batch = FirebaseFirestore.instance.batch();
+                  _selectedGroups.forEach((index) {
+                    batch.delete(
+                        FirebaseFirestore.instance.collection('groups').doc(_groups[index].id));
+                  });
+                  await batch.commit();
+
+                  setState(() {
+                    _groups = _groups
+                        .asMap()
+                        .entries
+                        .where((entry) => !_selectedGroups.contains(entry.key))
+                        .map((entry) => entry.value)
+                        .toList();
+                    _selectedGroups.clear();
+                    _selectionMode = false;
+                  });
+
+                  print('Grupos selecionados removidos do Firestore.');
+                } catch (e) {
+                  print('Erro ao remover grupos: $e');
+                  // Trate o erro adequadamente
+                }
               },
               child: const Text('Apagar conversa'),
             ),
@@ -208,10 +218,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredGroups = _selectedCategory == null
-        ? _groups
-        : _groups.where((g) => g.category == _selectedCategory).toList();
-
+    // final filteredGroups = _selectedCategory == null
+    //     ? _groups
+    //     : _groups.where((g) => g.category == _selectedCategory).toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Grupos'),
@@ -228,53 +237,69 @@ class _GroupsScreenState extends State<GroupsScreen> {
             ),
         ],
       ),
-      body: ListView.builder(
-        itemCount: filteredGroups.length,
-        itemBuilder: (context, index) {
-          final group = filteredGroups[index];
-          final actualIndex = _groups.indexOf(group);
-          final isSelected = _selectedGroups.contains(actualIndex);
-
-          return Container(
-            color: isSelected ? Colors.deepPurple.shade100 : null,
-            child: Stack(
-              children: [
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  leading: Stack(
-                    children: [
-                      const CircleAvatar(child: Icon(Icons.group)),
-                      if (_selectionMode && isSelected)
-                        const Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: CircleAvatar(
-                            radius: 12,
-                            backgroundColor: Colors.deepPurple,
-                            child: Icon(Icons.check,
-                                size: 14, color: Colors.white),
-                          ),
-                        ),
-                    ],
-                  ),
-                  title: Text(group.name),
-                  onTap: () {
-                    if (_selectionMode) {
-                      _toggleSelection(actualIndex);
-                    } else {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ListPage(groupName: group.name),
-                        ),
-                      );
-                    }
-                  },
-                  onLongPress: () => _toggleSelection(actualIndex),
+      // Use StreamBuilder para exibir os grupos do Firestore
+      body: StreamBuilder<List<GroupData>>(
+        stream: _loadGroups(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Erro ao carregar grupos: ${snapshot.error}'));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('Nenhum grupo encontrado.'));
+          }
+          final filteredGroups = _selectedCategory == null
+              ? snapshot.data!
+              : snapshot.data!.where((g) => g.category == _selectedCategory).toList();
+          return ListView.builder(
+            itemCount: filteredGroups.length,
+            itemBuilder: (context, index) {
+              final group = filteredGroups[index];
+              return Container(
+                color: _selectedGroups.contains(index) ? Colors.deepPurple.shade100 : null,
+                child: Stack(
+                  children: [
+                    ListTile(
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      leading: Stack(
+                        children: [
+                          const CircleAvatar(child: Icon(Icons.group)),
+                          if (_selectionMode && _selectedGroups.contains(index))
+                            const Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.deepPurple,
+                                child: Icon(Icons.check,
+                                    size: 14, color: Colors.white),
+                              ),
+                            ),
+                        ],
+                      ),
+                      title: Text(group.name),
+                      onTap: () {
+                        if (_selectionMode) {
+                          _toggleSelection(index);
+                        } else {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              // Modificação Importante: Passa o ID do grupo
+                              builder: (context) => ListPage(groupId: group.id!),
+                            ),
+                          );
+                        }
+                      },
+                      onLongPress: () => _toggleSelection(index),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),
