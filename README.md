@@ -42,3 +42,24 @@ flutter pub get
 
 # Rode no emulador ou dispositivo Android:
 flutter run
+⚠️ **O aplicativo é compatível apenas com Android no momento.**
+
+---
+
+## 🧪 Tecnologias utilizadas
+
+- Flutter  
+- Dart  
+- Firebase Firestore  
+- Material Design 3  
+
+---
+
+## 👥 Desenvolvedores
+
+Este projeto foi desenvolvido por:
+
+- Diego Rocha  
+- Iago Fereguetti  
+- Luan Carrieiros  
+- Lucas Hauck  
