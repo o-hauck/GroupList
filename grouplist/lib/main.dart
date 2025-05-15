@@ -110,6 +110,68 @@ class _GroupsScreenState extends State<GroupsScreen> {
     }
   }
 
+  Future<void> _editGroup(GroupData group) async {
+    final nameController = TextEditingController(text: group.name);
+    String selectedCategory = group.category;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Editar Grupo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Nome do grupo'),
+              ),
+              DropdownButtonFormField<String>(
+                value: selectedCategory,
+                items: _categories
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    selectedCategory = value;
+                  }
+                },
+                decoration: const InputDecoration(labelText: 'Categoria'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  try {
+                    await FirebaseFirestore.instance
+                        .collection('groups')
+                        .doc(group.id)
+                        .update({
+                      'name': name,
+                      'category': selectedCategory,
+                    });
+                    Navigator.pop(context);
+                    print('Grupo atualizado.');
+                  } catch (e) {
+                    print('Erro ao atualizar grupo: $e');
+                  }
+                }
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _removeSelectedGroups() async {
     if (_selectedGroupIds.isEmpty) return;
 
@@ -152,7 +214,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 
   void _toggleSelection(String groupId) {
-    
     setState(() {
       if (_selectedGroupIds.contains(groupId)) {
         _selectedGroupIds.remove(groupId);
@@ -231,9 +292,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
             return const Center(child: Text('Nenhum grupo encontrado.'));
           }
 
-          final groups = _selectedCategory == null
+          final groups = (_selectedCategory == null
               ? snapshot.data!
-              : snapshot.data!.where((g) => g.category == _selectedCategory).toList();
+              : snapshot.data!.where((g) => g.category == _selectedCategory).toList())
+            ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
           return ListView.builder(
             itemCount: groups.length,
@@ -243,44 +305,44 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
               return Container(
                 color: isSelected ? Colors.deepPurple.shade100 : null,
-                child: Stack(
-                  children: [
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      leading: Stack(
-                        children: [
-                          const CircleAvatar(child: Icon(Icons.group)),
-                          if (_selectionMode && isSelected)
-                            const Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: CircleAvatar(
-                                radius: 12,
-                                backgroundColor: Colors.deepPurple,
-                                child: Icon(Icons.check, size: 14, color: Colors.white),
-                              ),
-                            ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: const CircleAvatar(child: Icon(Icons.group)),
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text(group.name)),
+                      PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'edit') {
+                            _editGroup(group);
+                          } else if (value == 'select') {
+                            _toggleSelection(group.id!);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                          const PopupMenuItem(value: 'select', child: Text('Selecionar')),
                         ],
                       ),
-                      title: Text(group.name),
-                      onTap: () {
-                        if (_selectionMode) {
-                          _toggleSelection(group.id!);
-                        } else {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ListPage(
-                                groupId: group.id!,
-                                groupName: group.name,
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      onLongPress: () => _toggleSelection(group.id!),
-                    ),
-                  ],
+                    ],
+                  ),
+                  onTap: () {
+                    if (_selectionMode) {
+                      _toggleSelection(group.id!);
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ListPage(
+                            groupId: group.id!,
+                            groupName: group.name,
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  onLongPress: () => _toggleSelection(group.id!),
                 ),
               );
             },
