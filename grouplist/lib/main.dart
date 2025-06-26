@@ -6,6 +6,9 @@ import 'groupdata.dart';
 import 'splash.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+// Importa o helper do banco de dados que criamos.
+import 'database_helper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +38,8 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// NENHUMA ALTERAÇÃO NECESSÁRIA AQUI.
+// Sua estrutura de navegação principal está preservada.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -86,27 +91,84 @@ class GroupsScreen extends StatefulWidget {
 }
 
 class _GroupsScreenState extends State<GroupsScreen> {
+  final dbHelper = DatabaseHelper();
+  List<GroupData> _localGroups = [];
+  bool _isLoading = true;
+
   final Set<String> _selectedGroupIds = {};
   bool _selectionMode = false;
   String? _selectedCategory;
-
   final List<String> _categories = ['Compras', 'Convidados', 'Viagens'];
 
-  Stream<List<GroupData>> _loadGroups() {
-    return FirebaseFirestore.instance.collection('groups').snapshots().map(
-          (snapshot) => snapshot.docs.map((doc) {
-            final data = doc.data();
-            return GroupData.fromJson({'id': doc.id, ...data});
-          }).toList(),
-        );
+  @override
+  void initState() {
+    super.initState();
+    _loadAndSyncGroups();
   }
 
+  // Nova função para carregar e sincronizar os dados
+  Future<void> _loadAndSyncGroups() async {
+    if (_localGroups.isEmpty) {
+      setState(() => _isLoading = true);
+    }
+
+    // 1. Tenta carregar os dados locais primeiro para uma UI rápida
+    var localData = await dbHelper.getGroups();
+    if (mounted) {
+      setState(() {
+        _localGroups = localData;
+        _isLoading = false;
+      });
+    }
+
+    // 2. Verifica a conexão com a internet
+    final connectivityResult = await (Connectivity().checkConnectivity());
+    if (connectivityResult == ConnectivityResult.none) {
+      print('Sem conexão com a internet. Exibindo dados locais.');
+      return; // Para a execução se estiver offline
+    }
+
+    // 3. Se houver internet, busca no Firebase e atualiza o banco local
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('groups').get();
+      final firebaseGroups = snapshot.docs.map((doc) {
+        return GroupData.fromJson({'id': doc.id, ...doc.data()});
+      }).toList();
+
+      await dbHelper.clearAllGroups();
+      for (var group in firebaseGroups) {
+        await dbHelper.insertOrUpdateGroup(group);
+      }
+
+      // 4. Recarrega os dados do banco local e atualiza a tela
+      final updatedLocalData = await dbHelper.getGroups();
+      if (mounted) {
+        setState(() {
+          _localGroups = updatedLocalData;
+        });
+      }
+    } catch (e) {
+      print('Falha ao sincronizar com Firebase: $e. Exibindo dados locais.');
+    }
+  }
+
+  // Funções de CRUD (criar, editar, apagar) atualizadas
   Future<void> _addGroup(GroupData group) async {
     try {
-      await FirebaseFirestore.instance.collection('groups').add(group.toJson());
-      print('Grupo "${group.name}" adicionado ao Firestore.');
+      // Adiciona no Firebase para obter um ID
+      final docRef = await FirebaseFirestore.instance.collection('groups').add(group.toJson());
+      final newGroup = GroupData(group.name, group.category, id: docRef.id);
+
+      // Salva também no banco de dados local
+      await dbHelper.insertOrUpdateGroup(newGroup);
+
+      // Atualiza a lista na tela imediatamente
+      setState(() {
+        _localGroups.add(newGroup);
+      });
     } catch (e) {
-      print('Erro ao adicionar grupo "${group.name}": $e');
+      print('Erro ao adicionar grupo: $e');
     }
   }
 
@@ -128,13 +190,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
               ),
               DropdownButtonFormField<String>(
                 value: selectedCategory,
-                items: _categories
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
+                items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                 onChanged: (value) {
-                  if (value != null) {
-                    selectedCategory = value;
-                  }
+                  if (value != null) selectedCategory = value;
                 },
                 decoration: const InputDecoration(labelText: 'Categoria'),
               ),
@@ -149,16 +207,17 @@ class _GroupsScreenState extends State<GroupsScreen> {
               onPressed: () async {
                 final name = nameController.text.trim();
                 if (name.isNotEmpty) {
+                  final updatedGroup = GroupData(name, selectedCategory, id: group.id);
                   try {
-                    await FirebaseFirestore.instance
-                        .collection('groups')
-                        .doc(group.id)
-                        .update({
-                      'name': name,
-                      'category': selectedCategory,
+                    await FirebaseFirestore.instance.collection('groups').doc(group.id).update(updatedGroup.toJson());
+                    await dbHelper.insertOrUpdateGroup(updatedGroup);
+
+                    setState(() {
+                      final index = _localGroups.indexWhere((g) => g.id == group.id);
+                      if (index != -1) _localGroups[index] = updatedGroup;
                     });
+
                     Navigator.pop(context);
-                    print('Grupo atualizado.');
                   } catch (e) {
                     print('Erro ao atualizar grupo: $e');
                   }
@@ -174,7 +233,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
   Future<void> _removeSelectedGroups() async {
     if (_selectedGroupIds.isEmpty) return;
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -192,15 +250,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   final batch = FirebaseFirestore.instance.batch();
                   for (var groupId in _selectedGroupIds) {
                     batch.delete(FirebaseFirestore.instance.collection('groups').doc(groupId));
+                    await dbHelper.deleteGroup(groupId); // Remove do local também
                   }
                   await batch.commit();
-
                   setState(() {
+                    _localGroups.removeWhere((g) => _selectedGroupIds.contains(g.id));
                     _selectedGroupIds.clear();
                     _selectionMode = false;
                   });
-
-                  print('Grupos selecionados removidos do Firestore.');
                 } catch (e) {
                   print('Erro ao remover grupos: $e');
                 }
@@ -213,6 +270,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
     );
   }
 
+  // Funções de UI (sem grandes alterações na lógica)
   void _toggleSelection(String groupId) {
     setState(() {
       if (_selectedGroupIds.contains(groupId)) {
@@ -260,8 +318,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
     );
   }
 
+  // Novo método build sem o StreamBuilder
   @override
   Widget build(BuildContext context) {
+    final filteredGroups = (_selectedCategory == null
+            ? _localGroups
+            : _localGroups.where((g) => g.category == _selectedCategory).toList())
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.deepPurple.shade200,
@@ -279,75 +343,61 @@ class _GroupsScreenState extends State<GroupsScreen> {
             ),
         ],
       ),
-      body: StreamBuilder<List<GroupData>>(
-        stream: _loadGroups(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('Erro ao carregar grupos: ${snapshot.error}'));
-          }
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('Nenhum grupo encontrado.'));
-          }
-
-          final groups = (_selectedCategory == null
-              ? snapshot.data!
-              : snapshot.data!.where((g) => g.category == _selectedCategory).toList())
-            ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-
-          return ListView.builder(
-            itemCount: groups.length,
-            itemBuilder: (context, index) {
-              final group = groups[index];
-              final isSelected = _selectedGroupIds.contains(group.id);
-
-              return Container(
-                color: isSelected ? Colors.deepPurple.shade100 : null,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  leading: const CircleAvatar(child: Icon(Icons.group)),
-                  title: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text(group.name)),
-                      PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == 'edit') {
-                            _editGroup(group);
-                          } else if (value == 'select') {
-                            _toggleSelection(group.id!);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'edit', child: Text('Editar')),
-                          const PopupMenuItem(value: 'select', child: Text('Selecionar')),
-                        ],
-                      ),
-                    ],
-                  ),
-                  onTap: () {
-                    if (_selectionMode) {
-                      _toggleSelection(group.id!);
-                    } else {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ListPage(
-                            groupId: group.id!,
-                            groupName: group.name,
+      body: RefreshIndicator(
+        onRefresh: _loadAndSyncGroups, // Permite "puxar para atualizar"
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : filteredGroups.isEmpty
+                ? const Center(child: Text('Nenhum grupo encontrado.'))
+                : ListView.builder(
+                    itemCount: filteredGroups.length,
+                    itemBuilder: (context, index) {
+                      final group = filteredGroups[index];
+                      final isSelected = _selectedGroupIds.contains(group.id);
+                      return Container(
+                        color: isSelected ? Colors.deepPurple.shade100 : null,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          leading: const CircleAvatar(child: Icon(Icons.group)),
+                          title: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(child: Text(group.name)),
+                              PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'edit') {
+                                    _editGroup(group);
+                                  } else if (value == 'select') {
+                                    _toggleSelection(group.id!);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                                  const PopupMenuItem(value: 'select', child: Text('Selecionar')),
+                                ],
+                              ),
+                            ],
                           ),
+                          onTap: () {
+                            if (_selectionMode) {
+                              _toggleSelection(group.id!);
+                            } else {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ListPage(
+                                    groupId: group.id!,
+                                    groupName: group.name,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          onLongPress: () => _toggleSelection(group.id!),
                         ),
                       );
-                    }
-                  },
-                  onLongPress: () => _toggleSelection(group.id!),
-                ),
-              );
-            },
-          );
-        },
+                    },
+                  ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToNewGroupForm,
@@ -357,20 +407,16 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 }
 
+// Seu widget GroupDetailsScreen permanece inalterado.
 class GroupDetailsScreen extends StatelessWidget {
   final String groupName;
-
   const GroupDetailsScreen({super.key, required this.groupName});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(groupName),
-      ),
-      body: const Center(
-        child: Text('Aqui será exibida a lista do grupo.'),
-      ),
+      appBar: AppBar(title: Text(groupName)),
+      body: const Center(child: Text('Aqui será exibida a lista do grupo.')),
     );
   }
 }

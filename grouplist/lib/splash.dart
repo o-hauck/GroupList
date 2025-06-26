@@ -15,7 +15,7 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
 
     // Tempo de exibição do splash
-    Future.delayed(const Duration(seconds: 7), () {
+    Future.delayed(const Duration(seconds: 1), () {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
