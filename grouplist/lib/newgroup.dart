@@ -1,6 +1,9 @@
+// lib/newgroup.dart (VERSÃO CORRIGIDA E COMPLETA)
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'groupdata.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'groupdata.dart';
+import 'auth_screen.dart';
 
 class NewGroupForm extends StatefulWidget {
   final void Function(GroupData group) onCreate;
@@ -18,20 +21,20 @@ class _NewGroupFormState extends State<NewGroupForm> {
   final List<String> _categories = ['Compras', 'Convidados', 'Viagens'];
   String _selectedCategory = 'Compras';
 
+  bool _isSharedList = false;
+
+  // Variáveis de estado dos contatos
   List<Contact> _contacts = [];
   List<Contact> _filteredContacts = [];
   final Set<String> _selectedContactIds = {};
   String? _errorMessage;
-  bool _isLoading = false;
-  int _loadedContacts = 0;
-  final int _loadBatchSize = 30;
+  bool _isLoadingContacts = false; // Renomeado para clareza
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_filterContacts);
-    _scrollController.addListener(_onScroll);
-    _getContacts();
+    // A busca de contatos foi movida para o onChanged do Switch
   }
 
   @override
@@ -42,69 +45,93 @@ class _NewGroupFormState extends State<NewGroupForm> {
     super.dispose();
   }
 
+  // LÓGICA DE CONTATOS RESTAURADA
   Future<void> _getContacts() async {
-    setState(() => _isLoading = true);
+    setState(() => _isLoadingContacts = true);
     try {
-      if (await FlutterContacts.requestPermission(readonly: true)) {
-        final fetchedContacts = await FlutterContacts.getContacts(
-          withProperties: false,
-        );
-        setState(() {
-          _contacts = fetchedContacts;
-          _filteredContacts = _contacts.take(_loadBatchSize).toList();
-          _loadedContacts = _filteredContacts.length;
-        });
+      if (await FlutterContacts.requestPermission()) {
+        _contacts = await FlutterContacts.getContacts(withProperties: true);
+        _filterContacts(); // Filtra inicialmente (mostra todos)
       } else {
-        setState(() {
-          _contacts = [Contact(name: Name(first: 'Permissão', last: 'negada'))];
-          _filteredContacts = _contacts;
-        });
+        _errorMessage = 'Permissão para acessar contatos foi negada.';
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Erro ao carregar os contatos: $e');
+      _errorMessage = 'Erro ao buscar contatos: $e';
     } finally {
-      setState(() => _isLoading = false);
+      setState(() => _isLoadingContacts = false);
     }
   }
 
+  // LÓGICA DE FILTRO RESTAURADA
   void _filterContacts() {
     final query = _searchController.text.toLowerCase();
-    final filtered = _contacts.where((contact) {
-      final name = contact.displayName.isNotEmpty
-          ? contact.displayName
-          : ('${contact.name.first} ${contact.name.last}').trim();
-      return name.toLowerCase().contains(query);
-    }).toList();
-
     setState(() {
-      _filteredContacts = filtered.take(_loadBatchSize).toList();
-      _loadedContacts = _filteredContacts.length;
+      _filteredContacts = _contacts.where((contact) {
+        final displayName = contact.displayName.toLowerCase();
+        return displayName.contains(query);
+      }).toList();
     });
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 100) {
-      _loadMoreContacts();
+  // Lógica para criar o grupo
+  void _createGroup() {
+    if (_nameController.text.isNotEmpty) {
+      final group = GroupData(_nameController.text, _selectedCategory);
+      // Aqui você pode adicionar os _selectedContactIds ao grupo se necessário
+      widget.onCreate(group);
+      Navigator.pop(context);
     }
   }
 
-  void _loadMoreContacts() {
-    if (_loadedContacts >= _contacts.length) return;
+  // Lógica para o FloatingActionButton
+  void _handleCreateGroupAction() {
+    if (!_isSharedList) {
+      _createGroup();
+      return;
+    }
 
-    final nextBatch = _contacts.skip(_loadedContacts).take(_loadBatchSize).toList();
-    final currentFiltered = _searchController.text.isEmpty
-        ? [..._filteredContacts, ...nextBatch]
-        : [..._filteredContacts, ...nextBatch.where((contact) {
-            final name = contact.displayName.isNotEmpty
-                ? contact.displayName
-                : ('${contact.name.first} ${contact.name.last}').trim();
-            return name.toLowerCase().contains(_searchController.text.toLowerCase());
-          })];
+    final currentUser = FirebaseAuth.instance.currentUser;
 
-    setState(() {
-      _filteredContacts = currentFiltered;
-      _loadedContacts = _filteredContacts.length;
-    });
+    if (currentUser != null) {
+      _createGroup();
+    } else {
+      _showLoginPrompt();
+    }
+  }
+
+  // Popup para perguntar sobre o login
+  Future<void> _showLoginPrompt() {
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Login Necessário'),
+          content: const SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text('Para criar uma lista compartilhada, você precisa fazer login.'),
+                Text('Deseja fazer login?'),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Não'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: const Text('Sim'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Fecha o dialog
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (context) => const AuthScreen(),
+                ));
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -117,10 +144,8 @@ class _NewGroupFormState extends State<NewGroupForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const CircleAvatar(
-              radius: 30,
-              child: Icon(Icons.image, size: 30),
-            ),
+            // Seção de informações do Grupo (sempre visível)
+            const CircleAvatar(radius: 30, child: Icon(Icons.image, size: 30)),
             const SizedBox(height: 16),
             TextField(
               controller: _nameController,
@@ -136,67 +161,90 @@ class _NewGroupFormState extends State<NewGroupForm> {
                   label: Text(category),
                   selected: isSelected,
                   checkmarkColor: Colors.white,
-                  onSelected: (_) {
-                    setState(() => _selectedCategory = category);
-                  },
+                  onSelected: (_) => setState(() => _selectedCategory = category),
                   selectedColor: Colors.deepPurple,
                   labelStyle: TextStyle(
-                    color: isSelected ? Colors.white70 : Colors.black,
+                    color: isSelected ? Colors.white : Colors.black,
                   ),
                 );
               }).toList(),
             ),
             const SizedBox(height: 16),
-            const Text('Pesquisar contatos:'),
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Buscar por nome...'
-              ),
+
+            // Switch para lista privada/compartilhada
+            SwitchListTile(
+              title: const Text('Lista Compartilhada'),
+              subtitle: const Text('Adicionar membros da sua lista de contatos.'),
+              value: _isSharedList,
+              onChanged: (bool value) {
+                setState(() {
+                  _isSharedList = value;
+                  // CORREÇÃO: Carrega contatos APENAS se o switch for ativado
+                  // e se os contatos ainda não foram carregados.
+                  if (_isSharedList && _contacts.isEmpty) {
+                    _getContacts();
+                  }
+                });
+              },
             ),
-            const SizedBox(height: 16),
-            const Text('Membros:'),
-            if (_errorMessage != null)
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red),
-              )
-            else if (_isLoading)
-              const Center(child: CircularProgressIndicator())
-            else ..._filteredContacts.map((contact) => ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.person)),
-                  title: Text(
-                    contact.displayName.isNotEmpty
-                        ? contact.displayName
-                        : ('${contact.name.first} ${contact.name.last}').trim(),
-                    overflow: TextOverflow.ellipsis,
+
+            // CORREÇÃO: Seção de contatos SÓ APARECE se a lista for compartilhada
+            if (_isSharedList)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 24),
+                  const Text('Membros', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Buscar por nome...',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                  trailing: Checkbox(
-                    value: _selectedContactIds.contains(contact.id),
-                    onChanged: (selected) {
-                      setState(() {
-                        if (selected == true) {
-                          _selectedContactIds.add(contact.id);
-                        } else {
-                          _selectedContactIds.remove(contact.id);
-                        }
-                      });
-                    },
-                  ),
-                )),
+                  const SizedBox(height: 16),
+                  if (_errorMessage != null)
+                    Text(_errorMessage!, style: const TextStyle(color: Colors.red))
+                  else if (_isLoadingContacts)
+                    const Center(child: CircularProgressIndicator())
+                  else
+                    // Limita a altura da lista para evitar overflow
+                    SizedBox(
+                      height: 300, // Defina uma altura ou use Expanded em um Column
+                      child: ListView.builder(
+                        itemCount: _filteredContacts.length,
+                        itemBuilder: (context, index) {
+                          final contact = _filteredContacts[index];
+                          return ListTile(
+                            leading: const CircleAvatar(child: Icon(Icons.person)),
+                            title: Text(contact.displayName),
+                            trailing: Checkbox(
+                              value: _selectedContactIds.contains(contact.id),
+                              onChanged: (selected) {
+                                setState(() {
+                                  if (selected == true) {
+                                    _selectedContactIds.add(contact.id);
+                                  } else {
+                                    _selectedContactIds.remove(contact.id);
+                                  }
+                                });
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+
             const SizedBox(height: 100),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          if (_nameController.text.isNotEmpty) {
-            final group = GroupData(_nameController.text, _selectedCategory);
-            widget.onCreate(group);
-            Navigator.pop(context);
-          }
-        },
+        onPressed: _handleCreateGroupAction,
         child: const Icon(Icons.check),
       ),
     );
