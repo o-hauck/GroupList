@@ -71,9 +71,13 @@ class DatabaseHelper {
     final List<Map<String, dynamic>> maps = await db.query('groups');
     return List.generate(maps.length, (i) {
       return GroupData(
-        maps[i]['name'],
-        maps[i]['category'],
+        name: maps[i]['name'],
+        category: maps[i]['category'],
         id: maps[i]['id'],
+        membersUids: maps[i]['membersUids'] != null
+            ? List<String>.from(maps[i]['membersUids'])
+            : <String>[],
+        createdByUid: maps[i]['createdByUid'] ?? '',
       );
     });
   }

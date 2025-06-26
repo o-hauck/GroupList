@@ -1,35 +1,39 @@
 // lib/groupdata.dart
 
 class GroupData {
-  String? id;
+  String id; // ID do documento no Firestore
   final String name;
   final String category;
+  final List<String> membersUids; // Lista de UIDs dos membros
+  final String createdByUid; // UID de quem criou o grupo
 
-  GroupData(this.name, this.category, {this.id});
+  GroupData({
+    this.id = '',
+    required this.name,
+    required this.category,
+    required this.membersUids,
+    required this.createdByUid,
+  });
 
-  // Usado para enviar dados ao Firebase (NÃO inclui o ID)
+  // Converte um objeto GroupData para um Map (JSON) para salvar no Firestore
   Map<String, dynamic> toJson() {
     return {
       'name': name,
       'category': category,
+      'membersUids': membersUids,
+      'createdByUid': createdByUid,
     };
   }
 
-  // Usado para salvar dados no SQLite (INCLUI o ID)
-  Map<String, dynamic> toJsonForDb() {
-    return {
-      'id': id,
-      'name': name,
-      'category': category,
-    };
-  }
-
-  // Cria um objeto GroupData a partir de um Map (seja do Firebase ou SQLite)
-  factory GroupData.fromJson(Map<String, dynamic> json) {
+  // Cria um objeto GroupData a partir de um Map (JSON) vindo do Firestore
+  factory GroupData.fromJson(String id, Map<String, dynamic> json) {
     return GroupData(
-      json['name'],
-      json['category'],
-      id: json['id'],
+      id: id,
+      name: json['name'] as String,
+      category: json['category'] as String,
+      // Garante que a lista seja do tipo correto
+      membersUids: List<String>.from(json['membersUids'] as List),
+      createdByUid: json['createdByUid'] as String,
     );
   }
 }

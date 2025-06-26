@@ -1,6 +1,7 @@
 // lib/auth_screen.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -31,34 +32,37 @@ class _AuthScreenState extends State<AuthScreen> {
 
     try {
       if (_isLoginMode) {
-        // Modo Login
-        await _auth.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+        // ...
       } else {
         // Modo Cadastro
-        await _auth.createUserWithEmailAndPassword(
+        final userCredential = await _auth.createUserWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-      }
-      // Se chegou aqui, o login/cadastro foi bem sucedido.
-      // O pop() volta para a tela anterior (newgroup).
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
 
+        // NOVO: Salva os dados do novo usuário no Firestore
+        if (userCredential.user != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userCredential.user!.uid) // Usa o UID como ID do documento
+              .set({
+            'email': _emailController.text.trim(),
+            'createdAt': Timestamp.now(),
+          });
+        }
+      }
     } on FirebaseAuthException catch (e) {
       String message = 'Ocorreu um erro. Verifique suas credenciais.';
       if (e.code == 'weak-password') {
         message = 'A senha fornecida é muito fraca.';
       } else if (e.code == 'email-already-in-use') {
         message = 'Este email já foi cadastrado.';
-      } else if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
+      } else if (e.code == 'user-not-found' ||
+          e.code == 'wrong-password' ||
+          e.code == 'invalid-credential') {
         message = 'Email ou senha inválidos.';
       }
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
@@ -66,9 +70,9 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
       );
     } finally {
-       if(mounted) {
-         setState(() => _isLoading = false);
-       }
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -100,7 +104,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   autocorrect: false,
                   textCapitalization: TextCapitalization.none,
                   validator: (value) {
-                    if (value == null || value.trim().isEmpty || !value.contains('@')) {
+                    if (value == null ||
+                        value.trim().isEmpty ||
+                        !value.contains('@')) {
                       return 'Por favor, insira um email válido.';
                     }
                     return null;
@@ -125,7 +131,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   ElevatedButton(
                     onPressed: _submit,
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 40, vertical: 15),
                     ),
                     child: Text(_isLoginMode ? 'Entrar' : 'Criar Conta'),
                   ),
