@@ -1,8 +1,37 @@
-// ignore_for_file: avoid_print
+// lib/list.dart (VERSÃO FINAL E COMPLETA)
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'database_helper.dart'; // Importe o helper do banco de dados
+import 'group_options_screen.dart'; // Tela que vamos criar a seguir
+
+// Modelo de dados para um item
+class ItemData {
+  String id;
+  final String name;
+  final int quantity;
+  bool isChecked;
+
+  ItemData({
+    this.id = '',
+    required this.name,
+    required this.quantity,
+    this.isChecked = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'quantity': quantity,
+    'isChecked': isChecked,
+  };
+
+  factory ItemData.fromJson(String id, Map<String, dynamic> json) => ItemData(
+    id: id,
+    name: json['name'] as String,
+    quantity: json['quantity'] as int,
+    isChecked: json['isChecked'] as bool,
+  );
+}
+
 
 class ListPage extends StatefulWidget {
   final String groupId;
@@ -15,206 +44,60 @@ class ListPage extends StatefulWidget {
 }
 
 class _ListPageState extends State<ListPage> {
-  final dbHelper = DatabaseHelper();
-  List<ItemData> _localItems = [];
+  // Referência para a subcoleção de itens no Firestore
+  late final CollectionReference<Map<String, dynamic>> _itemsCollection;
 
   @override
   void initState() {
     super.initState();
-    _loadAndSyncItems();
+    _itemsCollection = FirebaseFirestore.instance
+        .collection('groups')
+        .doc(widget.groupId)
+        .collection('items');
   }
 
-  // Carrega itens do cache local e sincroniza com o Firebase.
-  Future<void> _loadAndSyncItems() async {
-    final localData = await dbHelper.getItems(widget.groupId);
-    if (mounted) {
-      setState(() {
-        _localItems = localData;
-      });
-    }
-
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('groups')
-          .doc(widget.groupId)
-          .collection('items')
-          .get();
-
-      final firebaseItems = snapshot.docs.map((doc) {
-        return ItemData.fromJson({'id': doc.id, ...doc.data()});
-      }).toList();
-
-      await dbHelper.clearItemsForGroup(widget.groupId);
-      for (var item in firebaseItems) {
-        await dbHelper.insertOrUpdateItem(item, widget.groupId);
-      }
-
-      final updatedLocalData = await dbHelper.getItems(widget.groupId);
-      if (mounted) {
-        setState(() {
-          _localItems = updatedLocalData;
-        });
-      }
-    } catch (e) {
-      print('Falha ao sincronizar itens com o Firebase: $e');
-    }
-  }
-
+  // Adiciona um novo item
   Future<void> _addItem(String name, int quantity) async {
-    try {
-      final docRef = await FirebaseFirestore.instance
-          .collection('groups')
-          .doc(widget.groupId)
-          .collection('items')
-          .add({'name': name, 'quantity': quantity, 'checked': false});
-      
-      final newItem = ItemData(id: docRef.id, name: name, quantity: quantity, checked: false);
-      await dbHelper.insertOrUpdateItem(newItem, widget.groupId);
-
-      // Atualiza a UI imediatamente de forma otimista
-      setState(() {
-        _localItems.add(newItem);
-      });
-
-    } catch (e) {
-      print('Erro ao adicionar item "$name": $e');
-    }
+    if (name.isEmpty) return;
+    await _itemsCollection.add({
+      'name': name,
+      'quantity': quantity,
+      'isChecked': false,
+      'createdAt': FieldValue.serverTimestamp(), // Para ordenar depois
+    });
   }
 
-  Future<void> _updateItemCheckedStatus(ItemData item, bool isChecked) async {
-    setState(() {
-      item.checked = isChecked;
-    });
-
-    try {
-      // Atualiza primeiro o local para uma resposta de UI imediata
-      await dbHelper.insertOrUpdateItem(item, widget.groupId);
-      // Depois atualiza o Firebase
-      await FirebaseFirestore.instance
-          .collection('groups')
-          .doc(widget.groupId)
-          .collection('items')
-          .doc(item.id)
-          .update({'checked': isChecked});
-    } catch (e) {
-      print('Erro ao atualizar status do item: $e');
-      // Reverte a mudança na UI em caso de erro
-      setState(() {
-        item.checked = !isChecked;
-      });
-    }
+  // Atualiza o status (marcado/desmarcado) de um item
+  Future<void> _updateItemCheckedStatus(String itemId, bool isChecked) async {
+    await _itemsCollection.doc(itemId).update({'isChecked': isChecked});
   }
   
-  Future<void> _selectAllItems() async {
-    final batch = FirebaseFirestore.instance.batch();
-    List<ItemData> itemsToUpdate = [];
-
-    for (var item in _localItems) {
-      if (!item.checked) {
-        itemsToUpdate.add(item);
-        final docRef = FirebaseFirestore.instance
-            .collection('groups')
-            .doc(widget.groupId)
-            .collection('items')
-            .doc(item.id);
-        batch.update(docRef, {'checked': true});
-      }
-    }
-    
-    if (itemsToUpdate.isEmpty) return;
-
-    try {
-      await batch.commit();
-      for(var item in itemsToUpdate) {
-        item.checked = true;
-        await dbHelper.insertOrUpdateItem(item, widget.groupId);
-      }
-      setState(() {});
-    } catch (e) {
-      print('Erro ao marcar todos os itens: $e');
-    }
-  }
-
+  // Remove os itens que foram marcados
   Future<void> _removeSelectedItems() async {
-    final itemsToRemove = _localItems.where((item) => item.checked).toList();
-    if (itemsToRemove.isEmpty) return;
-    
     final batch = FirebaseFirestore.instance.batch();
-    for (var item in itemsToRemove) {
-      final docRef = FirebaseFirestore.instance
-          .collection('groups')
-          .doc(widget.groupId)
-          .collection('items')
-          .doc(item.id);
-      batch.delete(docRef);
+    
+    // Pega todos os itens que estão marcados
+    final snapshot = await _itemsCollection.where('isChecked', isEqualTo: true).get();
+
+    if (snapshot.docs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nenhum item selecionado para remover.'))
+        );
+        return;
+    }
+
+    // Adiciona a operação de delete no batch
+    for (var doc in snapshot.docs) {
+      batch.delete(doc.reference);
     }
     
-    try {
-      await batch.commit();
-      for (var item in itemsToRemove) {
-        await dbHelper.deleteItem(item.id!);
-      }
-      setState(() {
-        _localItems.removeWhere((item) => item.checked);
-      });
-    } catch (e) {
-      print('Erro ao remover itens selecionados: $e');
-    }
+    await batch.commit();
   }
 
-  Future<void> _showEditItemDialog(int index) async {
-    final item = _localItems[index];
-    final nameController = TextEditingController(text: item.name);
-    final quantityController = TextEditingController(text: item.quantity.toString());
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Editar Item'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Nome do item')),
-            TextField(controller: quantityController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantidade')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              final quantity = int.tryParse(quantityController.text.trim()) ?? 1;
-              if (name.isNotEmpty) {
-                final updatedItem = ItemData(id: item.id, name: name, quantity: quantity, checked: item.checked);
-                try {
-                  await FirebaseFirestore.instance
-                      .collection('groups')
-                      .doc(widget.groupId)
-                      .collection('items')
-                      .doc(item.id)
-                      .update({'name': name, 'quantity': quantity});
-
-                  await dbHelper.insertOrUpdateItem(updatedItem, widget.groupId);
-                  
-                  setState(() {
-                    _localItems[index] = updatedItem;
-                  });
-                  Navigator.of(context).pop();
-                } catch (e) {
-                  print('Erro ao editar item: $e');
-                }
-              }
-            },
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-  }
-
+  // Exibe o dialog para adicionar um novo item
   void _showAddItemDialog() {
     final nameController = TextEditingController();
-    final quantityController = TextEditingController();
+    final quantityController = TextEditingController(text: '1');
 
     showDialog(
       context: context,
@@ -223,8 +106,17 @@ class _ListPageState extends State<ListPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nameController, maxLength: 50, decoration: const InputDecoration(labelText: 'Nome do item')),
-            TextField(controller: quantityController, keyboardType: TextInputType.number, maxLength: 4, decoration: const InputDecoration(labelText: 'Quantidade')),
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Nome do item'),
+              textCapitalization: TextCapitalization.sentences,
+            ),
+            TextField(
+              controller: quantityController,
+              decoration: const InputDecoration(labelText: 'Quantidade'),
+              keyboardType: TextInputType.number,
+            ),
           ],
         ),
         actions: [
@@ -233,10 +125,8 @@ class _ListPageState extends State<ListPage> {
             onPressed: () {
               final name = nameController.text.trim();
               final quantity = int.tryParse(quantityController.text.trim()) ?? 1;
-              if (name.isNotEmpty) {
-                _addItem(name, quantity);
-                Navigator.of(context).pop();
-              }
+              _addItem(name, quantity);
+              Navigator.of(context).pop();
             },
             child: const Text('Adicionar'),
           ),
@@ -249,104 +139,75 @@ class _ListPageState extends State<ListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.deepPurple.shade200,
         title: Text(widget.groupName),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
         actions: [
+          // NOVO: Menu de opções
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'select_all') {
-                _selectAllItems();
+              if (value == 'options') {
+                 Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => GroupOptionsScreen(
+                    groupId: widget.groupId,
+                    groupName: widget.groupName,
+                  ),
+                ));
               } else if (value == 'remove_selected') {
                 _removeSelectedItems();
               }
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(value: 'select_all', child: Text('Selecionar todos')),
-              const PopupMenuItem(value: 'remove_selected', child: Text('Remover selecionados')),
+              const PopupMenuItem(
+                value: 'options',
+                child: Text('Opções do Grupo'),
+              ),
+              const PopupMenuItem(
+                value: 'remove_selected',
+                child: Text('Remover Selecionados'),
+              ),
             ],
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadAndSyncItems,
-        child: _localItems.isEmpty
-            ? const Center(child: Text('Nenhum item adicionado ainda.'))
-            : ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _localItems.length,
-                itemBuilder: (context, index) {
-                  final item = _localItems[index];
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.deepPurple.shade50,
-                      child: Text(item.quantity.toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    title: Text(
-                      item.name,
-                      style: TextStyle(
-                        decoration: item.checked ? TextDecoration.lineThrough : null,
-                        color: item.checked ? Colors.black.withOpacity(0.5) : null,
-                      ),
-                    ),
-                    trailing: Checkbox(
-                      value: item.checked,
-                      onChanged: (val) {
-                        if (val != null) {
-                          _updateItemCheckedStatus(item, val);
-                        }
-                      },
-                    ),
-                    onTap: () => _showEditItemDialog(index),
-                  );
-                },
-              ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: _itemsCollection.orderBy('createdAt').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('Nenhum item neste grupo.'));
+          }
+
+          final items = snapshot.data!.docs.map((doc) {
+            return ItemData.fromJson(doc.id, doc.data() as Map<String, dynamic>);
+          }).toList();
+
+          return ListView.builder(
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return ListTile(
+                leading: CircleAvatar(child: Text(item.quantity.toString())),
+                title: Text(
+                  item.name,
+                  style: TextStyle(
+                    decoration: item.isChecked ? TextDecoration.lineThrough : null,
+                    color: item.isChecked ? Colors.grey : null,
+                  ),
+                ),
+                trailing: Checkbox(
+                  value: item.isChecked,
+                  onChanged: (val) => _updateItemCheckedStatus(item.id, val ?? false),
+                ),
+              );
+            },
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddItemDialog,
         child: const Icon(Icons.add),
       ),
-    );
-  }
-}
-class ItemData {
-  String? id;
-  final String name;
-  final int quantity;
-  bool checked;
-
-  ItemData({required this.name, required this.quantity, this.checked = false, this.id});
-
-  // Usado para o Firebase
-  Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      'quantity': quantity,
-      'checked': checked,
-    };
-  }
-
-  // Usado para o SQLite
-  Map<String, dynamic> toJsonForDb(String groupId) {
-    return {
-      'id': id,
-      'groupId': groupId,
-      'name': name,
-      'quantity': quantity,
-      'checked': checked ? 1 : 0, // SQLite usa 1 para true e 0 para false
-    };
-  }
-
-  // Cria um objeto a partir de um Map
-  factory ItemData.fromJson(Map<String, dynamic> json) {
-    return ItemData(
-      id: json['id'],
-      name: json['name'] as String,
-      quantity: json['quantity'] as int,
-      checked: json['checked'] is bool ? json['checked'] : json['checked'] == 1,
     );
   }
 }

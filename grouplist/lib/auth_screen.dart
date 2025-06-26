@@ -1,4 +1,5 @@
 // lib/auth_screen.dart
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -14,65 +15,74 @@ class _AuthScreenState extends State<AuthScreen> {
   final _auth = FirebaseAuth.instance;
   final _formKey = GlobalKey<FormState>();
 
-  // Controladores para os campos de texto
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // Variáveis de estado da UI
-  var _isLoginMode = true; // Alterna entre Login e Cadastro
+  var _isLoginMode = true;
   var _isLoading = false;
+  
+  // NOVO: Variável de estado para controlar a visibilidade da senha
+  var _isPasswordVisible = false;
 
   void _submit() async {
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) {
-      return; // Se o formulário não for válido, não faz nada
+      return;
     }
 
     setState(() => _isLoading = true);
 
     try {
+      UserCredential userCredential;
+
       if (_isLoginMode) {
-        // ...
-      } else {
-        // Modo Cadastro
-        final userCredential = await _auth.createUserWithEmailAndPassword(
+        userCredential = await _auth.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-
-        // NOVO: Salva os dados do novo usuário no Firestore
-        if (userCredential.user != null) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userCredential.user!.uid) // Usa o UID como ID do documento
-              .set({
-            'email': _emailController.text.trim(),
-            'createdAt': Timestamp.now(),
-          });
-        }
+      } else {
+        userCredential = await _auth.createUserWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
       }
+
+      if (userCredential.user != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .set({
+              'email': _emailController.text.trim().toLowerCase(),
+              'lastLogin': Timestamp.now(),
+            }, SetOptions(merge: true));
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
     } on FirebaseAuthException catch (e) {
       String message = 'Ocorreu um erro. Verifique suas credenciais.';
       if (e.code == 'weak-password') {
         message = 'A senha fornecida é muito fraca.';
       } else if (e.code == 'email-already-in-use') {
         message = 'Este email já foi cadastrado.';
-      } else if (e.code == 'user-not-found' ||
-          e.code == 'wrong-password' ||
-          e.code == 'invalid-credential') {
+      } else if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
         message = 'Email ou senha inválidos.';
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+      
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
+    } finally {
+       if(mounted) {
+         setState(() => _isLoading = false);
+       }
     }
   }
 
@@ -104,19 +114,36 @@ class _AuthScreenState extends State<AuthScreen> {
                   autocorrect: false,
                   textCapitalization: TextCapitalization.none,
                   validator: (value) {
-                    if (value == null ||
-                        value.trim().isEmpty ||
-                        !value.contains('@')) {
+                    if (value == null || value.trim().isEmpty || !value.contains('@')) {
                       return 'Por favor, insira um email válido.';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 12),
+                // NOVO: TextFormField da senha modificado
                 TextFormField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'Senha'),
-                  obscureText: true, // Esconde a senha
+                  decoration: InputDecoration(
+                    labelText: 'Senha',
+                    // Adiciona o ícone no final do campo
+                    suffixIcon: IconButton(
+                      // O ícone muda com base na visibilidade
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        // O setState reconstrói a tela com o novo valor
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
+                    ),
+                  ),
+                  // A propriedade obscureText agora depende da nossa variável de estado
+                  obscureText: !_isPasswordVisible, 
                   validator: (value) {
                     if (value == null || value.trim().length < 6) {
                       return 'A senha deve ter no mínimo 6 caracteres.';
@@ -140,7 +167,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   TextButton(
                     onPressed: () {
                       setState(() {
-                        _isLoginMode = !_isLoginMode; // Inverte o modo
+                        _isLoginMode = !_isLoginMode;
                       });
                     },
                     child: Text(

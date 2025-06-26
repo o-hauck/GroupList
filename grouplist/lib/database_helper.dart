@@ -107,7 +107,7 @@ class DatabaseHelper {
         'groupId': groupId,
         'name': item.name,
         'quantity': item.quantity,
-        'checked': item.checked ? 1 : 0,
+        'checked': 1,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -135,7 +135,7 @@ Future<void> deleteItem(String id) async {
         id: maps[i]['id'],
         name: maps[i]['name'],
         quantity: maps[i]['quantity'],
-        checked: maps[i]['checked'] == 1,
+        
       );
     });
   }

@@ -52,7 +52,7 @@ class _NewGroupFormState extends State<NewGroupForm> {
     }
     // Não permite que o usuário se auto-convide
     if (enteredEmail == FirebaseAuth.instance.currentUser?.email) {
-       ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Você já é o dono do grupo.')));
       return;
     }
@@ -85,32 +85,34 @@ class _NewGroupFormState extends State<NewGroupForm> {
 
   // Lógica principal para criar o grupo
   Future<void> _handleCreateGroupAction() async {
+    // PRIMEIRO: Verifica se o usuário está logado. Qualquer criação de grupo exige login.
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
       _showLoginPrompt();
       return;
     }
 
+    // SEGUNDO: Valida o formulário
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
+
     setState(() => _isCreatingGroup = true);
 
-    // Constrói a lista de UIDs dos membros
-    List<String> memberUids = [currentUser.uid]; // O criador sempre é membro
+    // TERCEIRO: Continua com a lógica para montar a lista de membros e criar o grupo
+    List<String> memberUids = [currentUser.uid];
 
     if (_isSharedList) {
-      // Converte os emails da lista de convidados para UIDs
       for (String email in _invitedMemberEmails) {
         final userQuery = await FirebaseFirestore.instance
             .collection('users')
             .where('email', isEqualTo: email)
             .limit(1)
             .get();
-            
+
         if (userQuery.docs.isNotEmpty) {
           final uid = userQuery.docs.first.id;
-          if(!memberUids.contains(uid)) {
+          if (!memberUids.contains(uid)) {
             memberUids.add(uid);
           }
         }
@@ -124,13 +126,12 @@ class _NewGroupFormState extends State<NewGroupForm> {
       createdByUid: currentUser.uid,
     );
 
-    // Chama a função de callback para salvar no Firestore e fecha a tela
     await widget.onCreate(newGroup);
 
-    if(mounted) {
+    if (mounted) {
       Navigator.pop(context);
     }
-    setState(() => _isCreatingGroup = false);
+    // Não precisa mais do setState aqui
   }
 
   // Mostra o popup para o usuário fazer login se não estiver autenticado
@@ -175,7 +176,8 @@ class _NewGroupFormState extends State<NewGroupForm> {
             children: [
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Nome do grupo...'),
+                decoration:
+                    const InputDecoration(labelText: 'Nome do grupo...'),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Por favor, insira um nome.';
@@ -191,7 +193,8 @@ class _NewGroupFormState extends State<NewGroupForm> {
                   return ChoiceChip(
                     label: Text(category),
                     selected: _selectedCategory == category,
-                    onSelected: (_) => setState(() => _selectedCategory = category),
+                    onSelected: (_) =>
+                        setState(() => _selectedCategory = category),
                   );
                 }).toList(),
               ),
@@ -200,7 +203,8 @@ class _NewGroupFormState extends State<NewGroupForm> {
                 title: const Text('Grupo Compartilhado'),
                 subtitle: const Text('Convidar outros membros por email.'),
                 value: _isSharedList,
-                onChanged: (bool value) => setState(() => _isSharedList = value),
+                onChanged: (bool value) =>
+                    setState(() => _isSharedList = value),
               ),
 
               // Seção para adicionar membros
@@ -210,7 +214,9 @@ class _NewGroupFormState extends State<NewGroupForm> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Membros', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text('Membros',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -218,15 +224,21 @@ class _NewGroupFormState extends State<NewGroupForm> {
                           Expanded(
                             child: TextFormField(
                               controller: _emailController,
-                              decoration: const InputDecoration(labelText: 'Email do membro'),
+                              decoration: const InputDecoration(
+                                  labelText: 'Email do membro'),
                               keyboardType: TextInputType.emailAddress,
                               onFieldSubmitted: (_) => _addMember(),
                             ),
                           ),
                           _isLookingUpUser
-                              ? const Padding(padding: EdgeInsets.all(12.0), child: CircularProgressIndicator(strokeWidth: 2.0,))
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.0,
+                                  ))
                               : IconButton(
-                                  icon: const Icon(Icons.add_circle_outline, color: Colors.deepPurple),
+                                  icon: const Icon(Icons.add_circle_outline,
+                                      color: Colors.deepPurple),
                                   onPressed: _addMember,
                                 ),
                         ],
@@ -239,7 +251,8 @@ class _NewGroupFormState extends State<NewGroupForm> {
                           children: _invitedMemberEmails
                               .map((email) => Chip(
                                     label: Text(email),
-                                    onDeleted: () => setState(() => _invitedMemberEmails.remove(email)),
+                                    onDeleted: () => setState(() =>
+                                        _invitedMemberEmails.remove(email)),
                                   ))
                               .toList(),
                         ),
@@ -250,15 +263,15 @@ class _NewGroupFormState extends State<NewGroupForm> {
           ),
         ),
       ),
-      floatingActionButton: _isCreatingGroup 
-        ? const FloatingActionButton(
-            onPressed: null,
-            child: CircularProgressIndicator(color: Colors.white),
-          )
-        : FloatingActionButton(
-            onPressed: _handleCreateGroupAction,
-            child: const Icon(Icons.check),
-          ),
+      floatingActionButton: _isCreatingGroup
+          ? const FloatingActionButton(
+              onPressed: null,
+              child: CircularProgressIndicator(color: Colors.white),
+            )
+          : FloatingActionButton(
+              onPressed: _handleCreateGroupAction,
+              child: const Icon(Icons.check),
+            ),
     );
   }
 }
